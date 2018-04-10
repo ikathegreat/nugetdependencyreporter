@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using CommandLineParser.Arguments;
 using CommandLineParser.Exceptions;
 
@@ -29,7 +25,7 @@ namespace packagedependencyreporter
             var outputReportFilePath = new ValueArgument<string>(
                     'o', "outputReportFilePath",
                     "Sets file path for output report file")
-            { Optional = true };
+                { Optional = true };
             parser.Arguments.Add(outputReportFilePath);
 
             try

@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace packagedependencyreporter
 {
@@ -40,12 +38,14 @@ namespace packagedependencyreporter
             Console.WriteLine("Done.");
 
             var allPackagesList = new List<Package>();
+            var summaryList = new List<string>();
 
             projectsList.ForEach(x => x.Packages.ForEach(y => allPackagesList.Add(y)));
 
             var packagesWithMultipleVersionsList = allPackagesList.Distinct(new DistinctItemComparer()).GroupBy(x => x.Name)
                 .Where(y => y.Count() > 1).ToList();
 
+            var totalOutofDatePackagesCount = 0;
             foreach (var packageName in packagesWithMultipleVersionsList)
             {
                 var multipleVersionPackageList = allPackagesList.FindAll(x => x.Name == packageName.Key);
@@ -53,24 +53,44 @@ namespace packagedependencyreporter
                 foreach (var foundPackage in multipleVersionPackageList)
                 {
                     if (foundPackage.Version > latestVersion)
-                        latestVersion = foundPackage.Version;                    
+                        latestVersion = foundPackage.Version;
                 }
-                Console.WriteLine(packageName.Key + " latest version: " + latestVersion);
+
+                var outOfDatePackagesCount = 0;
                 foreach (var foundPackage in multipleVersionPackageList)
                 {
-                    if(foundPackage.Version != latestVersion)
-                    Console.WriteLine(" " + foundPackage.Name + " " + foundPackage.ParentProject + " "
-                        + foundPackage.Version + " " + foundPackage.TargetFramework);
+                    //if (!HideDetailedInfo)
+                    //    Console.WriteLine($" {foundPackage.ParentProject} uses {foundPackage.Version} {foundPackage.TargetFramework}");
+
+                    if (foundPackage.Version != latestVersion)
+                    {
+                        outOfDatePackagesCount++;
+                    }
                 }
+
+                if (outOfDatePackagesCount > 0)
+                {
+                    summaryList.Add($"{packageName.Key} package (latest version: {latestVersion}) is out of date in {outOfDatePackagesCount} project(s):");
+                    allPackagesList.FindAll(x => (x.Version != latestVersion && x.Name == packageName.Key)).ForEach(y => summaryList.Add(
+                        string.Format(($" {y.ParentProject} {y.Version} {y.TargetFramework}"))));
+                }
+
+                totalOutofDatePackagesCount += outOfDatePackagesCount;
             }
 
             Console.WriteLine("Package checking completed.");
+
+            summaryList.ForEach(Console.WriteLine);
             stopwatch.Stop();
             var t = TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds);
+            Console.WriteLine($"{totalOutofDatePackagesCount} total out of date packages");
             Console.WriteLine($"Elapsed time: {t.Hours:D2}h:{t.Minutes:D2}m:{t.Seconds:D2}s:{t.Milliseconds:D3}ms");
         }
         private void CreateProjectAndGetPackages(string csprojFile)
         {
+            if (string.IsNullOrEmpty(csprojFile))
+                return;
+
             var project = new Project(csprojFile);
             var packagesPath = Path.Combine(Path.GetDirectoryName(csprojFile), "packages.config");
 
@@ -83,30 +103,17 @@ namespace packagedependencyreporter
                 if (!s.Contains(@"package id="))
                     continue;
 
-                var regex = new Regex("\"([^\"]*)\"");
-                // var match = regex.Match(s).Value;
+                var col = Regex.Matches(s, "\"([^\"]*)\"");
 
-                try
+                var package = new Package
                 {
-                    var col = Regex.Matches(s, "\"([^\"]*)\"");
+                    ParentProject = project.Name,
+                    Name = col[0].Value.Trim('"'),
+                    Version = new Version(col[1].Value.Trim('"')),
+                    TargetFramework = col[2].Value.Trim('"')
+                };
 
-                    var package = new Package();
-
-                    package.ParentProject = project.Name;
-                    package.Name = col[0].Value.Trim('"');
-                    package.Version = new Version(col[1].Value.Trim('"'));
-                    package.TargetFramework = col[2].Value.Trim('"');
-
-                    project.Packages.Add(package);
-
-                }
-                catch (Exception)
-                {
-
-                }
-
-
-
+                project.Packages.Add(package);
             }
             projectsList.Add(project);
         }
