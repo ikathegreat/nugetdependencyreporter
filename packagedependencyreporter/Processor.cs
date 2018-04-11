@@ -15,9 +15,19 @@ namespace packagedependencyreporter
         {
             var stopwatch = Stopwatch.StartNew();
 
-            Console.Write(string.Format($"Scanning {ProjectsDirectory}..."));
-            var csprojFilesList = Directory.EnumerateFiles(ProjectsDirectory,
-                "*.csproj", SearchOption.AllDirectories).ToList();
+            var csprojFilesList = new List<string>();
+            if (!string.IsNullOrEmpty(ProjectsDirectory))
+            {
+                Console.Write(string.Format($"Scanning {ProjectsDirectory}..."));
+                csprojFilesList = Directory.EnumerateFiles(ProjectsDirectory,
+                    "*.csproj", SearchOption.AllDirectories).ToList();
+            }
+            else
+            {
+                Console.WriteLine("Error: No path was provided.");
+                Environment.Exit(-1);
+            }
+
             Console.WriteLine("Done.");
             Console.WriteLine(string.Format($"Found {csprojFilesList.Count} .csproj files."));
 
@@ -85,6 +95,8 @@ namespace packagedependencyreporter
             var t = TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds);
             Console.WriteLine($"{totalOutofDatePackagesCount} total out of date packages");
             Console.WriteLine($"Elapsed time: {t.Hours:D2}h:{t.Minutes:D2}m:{t.Seconds:D2}s:{t.Milliseconds:D3}ms");
+            if (totalOutofDatePackagesCount > 0)
+                Environment.Exit(1);
         }
         private void CreateProjectAndGetPackages(string csprojFile)
         {

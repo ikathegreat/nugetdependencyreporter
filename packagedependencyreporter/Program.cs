@@ -19,14 +19,7 @@ namespace packagedependencyreporter
                     'p', "projectFilesPath",
                     "Sets root search path for project files")
             { Optional = false };
-            parser.Arguments.Add(projectFilesPath);
-
-            //Optional
-            var outputReportFilePath = new ValueArgument<string>(
-                    'o', "outputReportFilePath",
-                    "Sets file path for output report file")
-                { Optional = true };
-            parser.Arguments.Add(outputReportFilePath);
+            parser.Arguments.Add(projectFilesPath);            
 
             try
             {
