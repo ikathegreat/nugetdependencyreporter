@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml.Serialization;
 
 namespace packagedependencyreporter
 {
@@ -11,6 +12,11 @@ namespace packagedependencyreporter
     {
         private List<Project> projectsList;
         public string ProjectsDirectory { get; set; }
+        public string BranchName { get; set; }
+        public string RepositoryName { get; set; }
+        public bool PauseBeforeExit { get; set; } = false;
+        public bool RunAndCompareMode { get; set; } = false;
+
         internal void Process()
         {
             var stopwatch = Stopwatch.StartNew();
@@ -25,7 +31,7 @@ namespace packagedependencyreporter
             else
             {
                 Console.WriteLine("Error: No path was provided.");
-                Environment.Exit(-1);
+                Exit(ErrorCodes.NoPathProvided);
             }
 
             Console.WriteLine("Done.");
@@ -67,6 +73,7 @@ namespace packagedependencyreporter
                 }
 
                 var outOfDatePackagesCount = 0;
+                var totalPackagesUsedCount = 0;
                 foreach (var foundPackage in multipleVersionPackageList)
                 {
                     //if (!HideDetailedInfo)
@@ -76,11 +83,13 @@ namespace packagedependencyreporter
                     {
                         outOfDatePackagesCount++;
                     }
+
+                    totalPackagesUsedCount++;
                 }
 
                 if (outOfDatePackagesCount > 0)
                 {
-                    summaryList.Add($"{packageName.Key} package (latest version: {latestVersion}) is out of date in {outOfDatePackagesCount} project(s):");
+                    summaryList.Add($"{packageName.Key} package (latest version: {latestVersion}) is out of date in {outOfDatePackagesCount} project(s) of {totalPackagesUsedCount} total used:");
                     allPackagesList.FindAll(x => (x.Version != latestVersion && x.Name == packageName.Key)).ForEach(y => summaryList.Add(
                         string.Format(($" {y.ParentProject} {y.Version} {y.TargetFramework}"))));
                 }
@@ -89,15 +98,97 @@ namespace packagedependencyreporter
             }
 
             Console.WriteLine("Package checking completed.");
+            Console.WriteLine("---");
 
             summaryList.ForEach(Console.WriteLine);
+            Console.WriteLine("---");
             stopwatch.Stop();
             var t = TimeSpan.FromMilliseconds(stopwatch.ElapsedMilliseconds);
-            Console.WriteLine($"{totalOutofDatePackagesCount} total out of date packages");
+            Console.WriteLine($"{totalOutofDatePackagesCount} total out of date packages of {allPackagesList.Count} total packages used");
             Console.WriteLine($"Elapsed time: {t.Hours:D2}h:{t.Minutes:D2}m:{t.Seconds:D2}s:{t.Milliseconds:D3}ms");
+
+
+            if (!string.IsNullOrEmpty(RepositoryName) && !string.IsNullOrEmpty(BranchName))
+            {
+                var resultDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "SigmaTEK", "Repository Integrity", RepositoryName, BranchName, "Packages");
+
+                Directory.CreateDirectory(resultDir);
+                var resultFile = Path.Combine(resultDir, "Result.xml");
+
+                var result = new Result()
+                {
+                    OutOfDatePackagesCount = totalOutofDatePackagesCount,
+                    SummaryStringList = summaryList
+                };
+
+                if (RunAndCompareMode)
+                {
+                    var prevResult = LoadPrevResult(resultFile, new Result());
+
+                    if (prevResult.OutOfDatePackagesCount < result.OutOfDatePackagesCount)
+                    {
+                        Exit(ErrorCodes.OutOfDatePackagesFoundIncreased);
+                    }
+                }
+                else
+                {
+                    SaveResult(resultFile, result);
+                }
+            }
+            else
+            {
+                if (RunAndCompareMode)
+                    Console.WriteLine($"Error: Run and compare mode enabled, but repository and/or branch names are empty.");
+            }
+
             if (totalOutofDatePackagesCount > 0)
-                Environment.Exit(1);
+            {
+                Exit(ErrorCodes.OutOfDatePackagesFound);
+            }
         }
+
+
+        private static Result LoadPrevResult(string resultFile, Result prevResult)
+        {
+            TextReader reader = new StreamReader(resultFile);
+            var xmlSerializer = new XmlSerializer(typeof(Result));
+
+            try
+            {
+                prevResult = (Result)xmlSerializer.Deserialize(reader);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Exception occured while reading from XML: " + ex.Message);
+            }
+            finally
+            {
+                reader.Close();
+            }
+
+            return prevResult;
+        }
+
+        private static void SaveResult(string resultFile, Result result)
+        {
+            TextWriter writer = new StreamWriter(resultFile);
+            var xmlSerializer = new XmlSerializer(typeof(Result));
+
+            try
+            {
+                xmlSerializer.Serialize(writer, result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Exception occured while writing to XML: " + ex.Message);
+            }
+            finally
+            {
+                writer.Close();
+            }
+        }
+
         private void CreateProjectAndGetPackages(string csprojFile)
         {
             if (string.IsNullOrEmpty(csprojFile))
@@ -128,6 +219,17 @@ namespace packagedependencyreporter
                 project.Packages.Add(package);
             }
             projectsList.Add(project);
+        }
+
+        private void Exit(ErrorCodes errorCode)
+        {
+
+            if (PauseBeforeExit)
+            {
+                Console.WriteLine("Press any key to continue...");
+                Console.ReadKey();
+            }
+            Environment.Exit((int)errorCode);
         }
     }
 }
