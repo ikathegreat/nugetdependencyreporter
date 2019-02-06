@@ -44,6 +44,11 @@ namespace packagedependencyreporter
                     "Process normally and compare against previous build. Return an error code if the number of warnings or errors has increased. Requires repository and branch names.", false)
                 { Optional = true };
             parser.Arguments.Add(enableRunAndCompareMode);
+            var includeAllProjectOutput = new SwitchArgument(
+                    'a', "includeAllProjectOutput",
+                    "For projects with different versions, output all projects instead of just the ones not matching the latest found version", false)
+                { Optional = true };
+            parser.Arguments.Add(includeAllProjectOutput);
 
             try
             {
@@ -56,7 +61,8 @@ namespace packagedependencyreporter
                     PauseBeforeExit =  waitOnCompletion.Value,
                     RepositoryName = repositoryName.Value,
                     BranchName = branchName.Value,
-                    RunAndCompareMode = enableRunAndCompareMode.Value
+                    RunAndCompareMode = enableRunAndCompareMode.Value,
+                    IncludeAllProjectOutput = includeAllProjectOutput.Value
                 };
 
                 processor.Process();

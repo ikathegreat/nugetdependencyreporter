@@ -16,25 +16,33 @@ namespace packagedependencyreporter
         public string RepositoryName { get; set; }
         public bool PauseBeforeExit { get; set; } = false;
         public bool RunAndCompareMode { get; set; } = false;
+        public bool IncludeAllProjectOutput { get; set; } = false;
+
+
 
         internal void Process()
         {
             var stopwatch = Stopwatch.StartNew();
 
             var csprojFilesList = new List<string>();
-            if (!string.IsNullOrEmpty(ProjectsDirectory))
-            {
-                Console.Write(string.Format($"Scanning {ProjectsDirectory}..."));
-                csprojFilesList = Directory.EnumerateFiles(ProjectsDirectory,
-                    "*.csproj", SearchOption.AllDirectories).ToList();
-            }
-            else
+
+            if (string.IsNullOrEmpty(ProjectsDirectory))
             {
                 Console.WriteLine("Error: No path was provided.");
                 Exit(ErrorCodes.NoPathProvided);
             }
 
-            Console.WriteLine("Done.");
+            var directories = ProjectsDirectory.Split('|');
+            foreach (var directory in directories)
+            {
+                if (Directory.Exists(directory))
+                    GetCsprojFilesFromDirectory(directory, ref csprojFilesList);
+                else
+                {
+                    Console.WriteLine(string.Format($"Directory does not exist: {directory}"));
+                }
+            }
+
             Console.WriteLine(string.Format($"Found {csprojFilesList.Count} .csproj files."));
 
             if (csprojFilesList.Count == 0)
@@ -90,8 +98,17 @@ namespace packagedependencyreporter
                 if (outOfDatePackagesCount > 0)
                 {
                     summaryList.Add($"{packageName.Key} package (latest version: {latestVersion}) is out of date in {outOfDatePackagesCount} project(s) of {totalPackagesUsedCount} total used:");
-                    allPackagesList.FindAll(x => (x.Version != latestVersion && x.Name == packageName.Key)).ForEach(y => summaryList.Add(
-                        string.Format(($" {y.ParentProject} {y.Version} {y.TargetFramework}"))));
+
+                    if (IncludeAllProjectOutput)
+                    {
+                        allPackagesList.FindAll(x => x.Name == packageName.Key).ForEach(y =>
+                            summaryList.Add(string.Format($" {y.ParentProject} {y.Version} {y.TargetFramework}")));
+                    }
+                    else
+                    {
+                        allPackagesList.FindAll(x => x.Version != latestVersion && x.Name == packageName.Key).ForEach(y => summaryList.Add(
+                            string.Format($" {y.ParentProject} {y.Version} {y.TargetFramework}")));
+                    }
                 }
 
                 totalOutofDatePackagesCount += outOfDatePackagesCount;
@@ -146,6 +163,14 @@ namespace packagedependencyreporter
             {
                 Exit(ErrorCodes.OutOfDatePackagesFound);
             }
+        }
+
+        private static void GetCsprojFilesFromDirectory(string path, ref List<string> csprojFilesList)
+        {
+            Console.Write(string.Format($"Scanning {path}..."));
+            csprojFilesList.AddRange(Directory.EnumerateFiles(path,
+                "*.csproj", SearchOption.AllDirectories).ToList());
+            Console.WriteLine("Done.");
         }
 
 
